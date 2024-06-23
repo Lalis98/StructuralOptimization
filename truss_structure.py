@@ -2,8 +2,9 @@ import numpy as np
 from scipy.linalg import eigh
 import plotly.graph_objects as go
 
+
 class TrussStructure:
-    def __init__(self, coordinates, members, A, E, rho, num_dof, constrained_dofs):
+    def __init__(self, coordinates, members, A, E, rho, num_dof, constrained_dofs, added_mass_indices, added_mass):
 
         self.coordinates = coordinates
         self.members = members
@@ -12,7 +13,12 @@ class TrussStructure:
         self.rho = rho
         self.num_dof = num_dof
         self.constrained_dofs = constrained_dofs
-        # self.free_dofs = free_dofs
+        self.eigenvalues = None
+        self.eigenvectors = None
+        self.natural_frequencies = None
+        self.M = None
+        self.added_mass_indices = added_mass_indices
+        self.added_mass = added_mass
 
         # Number of Degrees of Freedom
         self.nodes_dof = np.arange(len(coordinates) * num_dof)
@@ -53,7 +59,7 @@ class TrussStructure:
     @staticmethod
     def _calculate_local_stiffness_matrix(node_i, node_j, E, Ae):
         """
-        Calculate the local stiffness matrix for a 3D truss element.
+        Calculate the local stiffness matrix for a 3D structure element.
 
         Args:
             node_i (numpy.ndarray): Coordinates (x, y, z) of the first node.
@@ -81,7 +87,7 @@ class TrussStructure:
     @staticmethod
     def _calculate_global_stiffness_matrix(dof, coordinates, members, members_dof, E, A):
         """
-        Calculate the global stiffness matrix for a truss structure.
+        Calculate the global stiffness matrix for a structure structure.
 
         Args:
             dof (int): Degrees of freedom per node.
@@ -113,7 +119,7 @@ class TrussStructure:
     @staticmethod
     def _calculate_rotation_matrix(node_i, node_j):
         """
-        Calculate the rotation matrix for a truss element based on the coordinates
+        Calculate the rotation matrix for a structure element based on the coordinates
         of its endpoints.
 
         Args:
@@ -143,7 +149,7 @@ class TrussStructure:
     @staticmethod
     def _calculate_local_mass_matrix(node_i, node_j, rho, Ae):
         """
-        Calculate the consistent mass matrix for a 3D truss element based on
+        Calculate the consistent mass matrix for a 3D structure element based on
         the coordinates of its endpoints and its material properties.
 
         Args:
@@ -153,7 +159,7 @@ class TrussStructure:
             Ae (float): Cross-sectional area of the element.
 
         Returns:
-            numpy.ndarray: The 6x6 consistent mass matrix for the truss element.
+            numpy.ndarray: The 6x6 consistent mass matrix for the structure element.
         """
 
         L = TrussStructure._calculate_length(node_i, node_j)
@@ -170,20 +176,20 @@ class TrussStructure:
         return M_local
 
     @staticmethod
-    def _calculate_global_mass_matrix(dof, coordinates, members, members_dof, rho, A):
+    def _calculate_global_mass_matrix(dof, coordinates, members, members_dof, rho, A, added_mass_indices, added_mass):
         """
-        Calculate the global consistent mass matrix for a 3D truss structure.
+        Calculate the global consistent mass matrix for a 3D structure.
 
         Args:
             dof (int): Degrees of freedom per node.
             coordinates (numpy.ndarray): Array of node coordinates.
             members (numpy.ndarray): List of member connections.
             members_dof (numpy.ndarray): List of degrees of freedom for each member.
-            rho (float): Density of the material of the truss elements.
-            A (numpy.ndarray): List of cross-sectional areas of the truss elements.
+            rho (float): Density of the material of the structure elements.
+            A (numpy.ndarray): List of cross-sectional areas of the structure elements.
 
         Returns:
-            numpy.ndarray: The global consistent mass matrix for the truss structure.
+            numpy.ndarray: The global consistent mass matrix for the structure.
         """
 
         M_global = np.zeros((len(coordinates) * dof, len(coordinates) * dof))  # Stiffness Matrix
@@ -197,6 +203,10 @@ class TrussStructure:
                                                              coordinates[node_j_index], rho, A[c])
 
             M_global[selection] += Me  # Adding element's Mass Matrix to global Stiffness Matrix
+
+        for i, index in enumerate(added_mass_indices):
+
+            M_global[index, index] += added_mass[i]
 
         return M_global
 
@@ -215,7 +225,6 @@ class TrussStructure:
             The split matrices Kcc, Kcf, Kfc, Kff (or Mcc, Mcf, Mfc, Mff).
         """
 
-
         Matrix_cc = matrix[np.ix_(constrained_dofs, constrained_dofs)]
         Matrix_cf = matrix[np.ix_(constrained_dofs, free_dofs)]
         Matrix_fc = matrix[np.ix_(free_dofs, constrained_dofs)]
@@ -223,28 +232,44 @@ class TrussStructure:
 
         return Matrix_cc, Matrix_cf, Matrix_fc, Matrix_ff
 
-    def calculate_eigenvalues(self):
+    def calculate_eigenvalues(self, A):
+
+        self.A = A
 
         K = TrussStructure._calculate_global_stiffness_matrix(self.num_dof, self.coordinates, self.members,
                                                               self.members_dof, self.E, self.A)
 
         M = TrussStructure._calculate_global_mass_matrix(self.num_dof, coordinates=self.coordinates,
                                                          members=self.members, members_dof=self.members_dof,
-                                                         rho=self.rho, A=self.A)
+                                                         rho=self.rho, A=self.A,
+                                                         added_mass_indices=self.added_mass_indices,
+                                                         added_mass=self.added_mass)
 
         (Kcc, Kcf, Kfc, Kff) = TrussStructure._split_matrix(matrix=K,
                                                             constrained_dofs=self.constrained_dofs,
                                                             free_dofs=self.free_dofs)
+
         (Mcc, Mcf, Mfc, Mff) = TrussStructure._split_matrix(matrix=M,
                                                             constrained_dofs=self.constrained_dofs,
                                                             free_dofs=self.free_dofs)
 
-        EIGENVALUES, EIGENVECTORS = eigh(Kff, Mff)
+        eigenvalues, eigenvectors = eigh(Kff, Mff)
 
-        # # Calculate the natural frequencies (omega)
-        # NATURAL_FREQUENCIES = np.sqrt(EIGENVALUES)  # ωi = √(λi)
+        self.eigenvalues = eigenvalues
+        self.eigenvectors = eigenvectors
+        self.natural_frequencies = 1 / (2 * np.pi) * np.sqrt(eigenvalues)  # ωi = √(λi)
 
-        return EIGENVALUES, EIGENVECTORS
+        return eigenvalues, eigenvectors, self.natural_frequencies
+
+    def calculate_total_mass(self):
+        total_mass = 0  # Initialize total mass of the structure
+
+        for c, connection in enumerate(self.members):
+            node_i_index, node_j_index = connection
+            L = self._calculate_length(self.coordinates[node_i_index], self.coordinates[node_j_index])
+            total_mass += self.rho * self.A[c] * L
+
+        return total_mass
 
     def plot_structure(self, title='Structure Visualization', x_label='X axis', y_label='Y axis', z_label='Z axis', node_color='red', node_size=4, member_color='black', member_width=1, style=None):
         """

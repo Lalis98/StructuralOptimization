@@ -94,7 +94,7 @@ def calculate_length(node_i, node_j):
 
 def calculate_local_stiffness_matrix(node_i, node_j, E, Ae):
     """
-    Calculate the local stiffness matrix for a 3D truss element.
+    Calculate the local stiffness matrix for a 3D structure element.
 
     Args:
         node_i (numpy.ndarray): Coordinates (x, y, z) of the first node.
@@ -122,7 +122,7 @@ def calculate_local_stiffness_matrix(node_i, node_j, E, Ae):
 
 def calculate_global_stiffness_matrix(dof, coordinates, members, members_dof, E, A):
     """
-    Calculate the global stiffness matrix for a truss structure.
+    Calculate the global stiffness matrix for a structure structure.
 
     Args:
         dof (int): Degrees of freedom per node.
@@ -152,7 +152,7 @@ def calculate_global_stiffness_matrix(dof, coordinates, members, members_dof, E,
 
 def calculate_rotation_matrix(node_i, node_j):
     """
-    Calculate the rotation matrix for a truss element based on the coordinates
+    Calculate the rotation matrix for a structure element based on the coordinates
     of its endpoints.
 
     Args:
@@ -182,7 +182,7 @@ def calculate_rotation_matrix(node_i, node_j):
 
 def calculate_local_mass_matrix(node_i, node_j, rho, Ae):
     """
-    Calculate the consistent mass matrix for a 3D truss element based on
+    Calculate the consistent mass matrix for a 3D structure element based on
     the coordinates of its endpoints and its material properties.
 
     Args:
@@ -192,7 +192,7 @@ def calculate_local_mass_matrix(node_i, node_j, rho, Ae):
         Ae (float): Cross-sectional area of the element.
 
     Returns:
-        numpy.ndarray: The 6x6 consistent mass matrix for the truss element.
+        numpy.ndarray: The 6x6 consistent mass matrix for the structure element.
     """
 
     L = calculate_length(node_i, node_j)
@@ -211,18 +211,18 @@ def calculate_local_mass_matrix(node_i, node_j, rho, Ae):
 
 def calculate_global_mass_matrix(dof, coordinates, members, members_dof, rho, A):
     """
-    Calculate the global consistent mass matrix for a 3D truss structure.
+    Calculate the global consistent mass matrix for a 3D structure structure.
 
     Args:
         dof (int): Degrees of freedom per node.
         coordinates (numpy.ndarray): Array of node coordinates.
         members (numpy.ndarray): List of member connections.
         members_dof (numpy.ndarray): List of degrees of freedom for each member.
-        rho (float): Density of the material of the truss elements.
-        A (numpy.ndarray): List of cross-sectional areas of the truss elements.
+        rho (float): Density of the material of the structure elements.
+        A (numpy.ndarray): List of cross-sectional areas of the structure elements.
 
     Returns:
-        numpy.ndarray: The global consistent mass matrix for the truss structure.
+        numpy.ndarray: The global consistent mass matrix for the structure structure.
     """
 
     M_global = np.zeros((len(coordinates) * dof, len(coordinates) * dof))  # Stiffness Matrix
@@ -295,17 +295,5 @@ def split_matrix(matrix, constrained_dofs, free_dofs):
     return Matrix_cc, Matrix_cf, Matrix_fc, Matrix_ff
 
 
-def objective_function(A, rho, coordinates, members):
-
-    total_mass = 0  # Initialize total mass of the structure
-
-    for c, connection in enumerate(members):
-        node_i_index, node_j_index = connection
-
-        L = calculate_length(coordinates[node_i_index], coordinates[node_j_index])
-
-        total_mass += rho * A[c] * L
-
-    return total_mass
 
 
